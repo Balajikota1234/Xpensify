@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="expenses.css">
+    <script src="https://cdn.tailwindcss.com"></script>      
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    <link rel="icon" type="image/x-icon" href="./Favicon.png">
+    <link rel="stylesheet" href="nav.css">
+    <title>Xpensify</title>
+</head>
+<body><br>
+    <section class="container">
+        <h1 class="text-3xl font-bold mb-6">New Expense</h1>
+
+        <label for="amount" class="label">Amount</label>
+        <div class="amount-input">
+            <span class="currency"><i class="bi bi-currency-rupee"></i></span>
+            <input id="amount" type="number" placeholder="0.00" class="input">
+        </div>
+
+        <label class="label">Category</label>
+        <div class="categories">
+            <button class="category shopping"><span class="icon"><i class="bi bi-bag-check"></i></span> Shopping</button>
+            <button class="category food"><span class="icon"><i class="bi bi-cup-straw"></i></span> Food & Drinks</button>
+            <button class="category transportation"><span class="icon"><i class="bi bi-bus-front"></i></span> Transportation</button>
+            <button class="category groceries"><span class="icon"><i class="bi bi-basket2-fill"></i></span> Groceries</button>
+            <button class="category entertainment"><span class="icon"><i class="bi bi-film"></i></span> Entertainment</button>
+            <button class="category gifts"><span class="icon"><i class="bi bi-gift"></i></span> Gifts</button>
+            <button class="category health"><span class="icon"><i class="bi bi-bandaid"></i></span> Health</button>
+            <button class="category education"><span class="icon"><i class="bi bi-mortarboard"></i></span> Education</button>
+            <button class="category fitness"><span class="icon"><i class="bi bi-heart-pulse"></i></span> Fitness</button>    
+            <button class="category housing"><span class="icon"><i class="bi bi-house-check"></i></span> Housing</button>                    
+            <button class="category bills-payments"><span class="icon"><i class="bi bi-receipt"></i></span> Bills & Payments</button>
+            <button class="category others"><span class="icon"><i class="bi bi-box-seam"></i></span> Others</button>
+
+        </div>
+
+        <label for="description" class="label">Description (Optional)</label>
+        <textarea id="description" class="input" placeholder="What was this Expense for?" rows="2"></textarea>
+
+        <label for="date" class="label">Date</label>
+        <div class="date-box date-display" onclick="document.getElementById('date').click()">
+            <i class="bi bi-calendar"></i>
+            <span id="selectedDate"></span>
+        </div>
+        <input type="date" id="date" class="input" onchange="updateDate(this.value)">
+
+        <p id="errorMessage" class="error-message">Please fill out all required fields.</p>
+
+        <button class="add-expense">+ Add Expense</button><br><br>
+    </section>
+
+    <div id="loadingOverlay" class="loading-overlay">
+    <div class="loader-container">
+        <div class="loader"></div>
+        <p>Submitting...</p>
+    </div>
+    </div>
+
+    <div id="successOverlay" class="success-overlay">
+    <div class="success-content">
+        <p>Saved successfully</p>
+    </div>
+    </div>
+
+    <div id="bottom-nav"></div>
+
+<script>
+    function formatDate(dateStr) {
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        const dateObj = new Date(dateStr);
+        return dateObj.toLocaleDateString(undefined, options);
+    }
+
+    function updateDate(value) {
+        document.getElementById('selectedDate').innerText = formatDate(value);
+    }
+
+    window.onload = function () {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date').value = today;
+        updateDate(today);
+    }
+
+    const buttons = document.querySelectorAll(".category");
+    let selectedCategory = "";
+
+    buttons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            buttons.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            selectedCategory = btn.textContent.trim();
+        });
+    });
+
+    function showToast(message) {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.classList.add("show");
+        setTimeout(() => {
+            toast.classList.remove("show");
+        }, 3000);
+    }
+
+    document.querySelector(".add-expense").addEventListener("click", () => {
+        const amount = document.getElementById("amount").value;
+        const description = document.getElementById("description").value;
+        const date = document.getElementById("date").value;
+
+    if (!amount || !selectedCategory || !date) {
+    const errorMsg = document.getElementById("errorMessage");
+    errorMsg.classList.add("show");
+
+    setTimeout(() => {
+        errorMsg.classList.remove("show");
+    }, 3000);
+    return;
+}
+
+        // Prevent multiple clicks
+        document.querySelector(".add-expense").disabled = true;
+
+        // Show loading overlay
+        document.getElementById("loadingOverlay").classList.add("active");
+
+        const expense = {
+            amount: parseFloat(amount),
+            category: selectedCategory,
+            description,
+            date
+        };
+
+    // Save and redirect after delay
+    setTimeout(() => {
+    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    expenses.push(expense);
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+
+    // Hide loading and show success
+    document.getElementById("loadingOverlay").classList.remove("active");
+    document.getElementById("successOverlay").classList.add("active");
+
+    setTimeout(() => {
+        window.location.href = "index.html";
+    }, 1500);
+    }, 1200);
+    });
+
+
+    fetch("nav.html")
+      .then(response => response.text())
+      .then(data=>{
+
+        document.getElementById("bottom-nav").innerHTML= data;
+
+        // Detect current page name
+    const currentPage = window.location.pathname.split("/").pop();
+
+    // Get all nav items
+    const navItems = document.querySelectorAll(".nav-item");
+
+    navItems.forEach(item => {
+      const href = item.getAttribute("href");
+      if (href === currentPage) {
+        item.classList.add("active");
+      } else {
+        item.classList.remove("active");
+      }
+    });
+
+      })
+      .catch(error=>console.error("Error loading bottom-nav.",error));
+
+
+
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    <link rel="icon" type="image/x-icon" href="./Favicon.png">
+    <title>Xpensify</title>
+</head>
+<body>
+
+    <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <h3 class="text-xl font-bold">Delete this Expense?</h3>
+      <p>This action cannot be undone.</p>
+      <div class="modal-buttons">
+        <button class="btn-cancel" onclick="cancelDelete()">Cancel</button>
+        <button class="btn-delete" onclick="confirmDelete()">Yes, Delete</button>
+      </div>
+    </div>
+    </div>
+
+    <header class="navbar">
+        <h1 class="text-3xl font-bold">Xpensify</h1>
+        <a href="expenses.html"><button class="add-btn"><i class="bi bi-plus"></i></button></a>
+    </header>
+
+    <div class="month-selector">
+        <button id="prevMonth">&lt;</button>
+        <span id="currentMonth">Month Year</span>
+        <button id="nextMonth">&gt;</button>
+    </div>
+
+    <main class="main-container">
+        <section class="person total-expense">
+            <h2 class="text-2xl font-bold">Total Expenses</h2>
+            <div class="amount" id="totalAmount">
+                <i class="bi bi-currency-rupee"></i>
+            </div>
+        </section>
+
+        <section class="person category-breakdown">
+            <h2 class="text-2xl font-bold">Category Breakdown</h2><br>
+            <div id="categoryBreakdown">
+                <p class="empty">No Data Available</p>
+            </div>
+        </section>
+
+        <section class="recent-expenses">
+            <h2 class="text-2xl font-bold">Recent Expenses</h2><br>
+            <div id="recentExpenses" class="empty">
+                <i class="bi bi-view-list"></i>
+                <p>No Expenses Found</p>
+                <small>Add some expenses to get started</small>
+            </div>
+        </section>
+    </main>
+
+  <div id="bottom-nav"></div>
+  
+  <script>
+    let selectedDate = new Date();
+    let indexToDelete = null;
+
+    function formatMonthYear(date) {
+      return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+    }
+
+    function updateMonthDisplay() {
+      document.getElementById("currentMonth").textContent = formatMonthYear(selectedDate);
+    }
+
+    function loadExpenses() {
+      const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+      const selectedMonth = selectedDate.getMonth();
+      const selectedYear = selectedDate.getFullYear();
+
+      const filteredExpenses = expenses.filter(e => {
+        const d = new Date(e.date);
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      });
+
+      const totalAmount = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+      document.getElementById("totalAmount").innerHTML = `<i class="bi bi-currency-rupee"></i> ${totalAmount.toFixed(2)}`;
+
+      const recentContainer = document.getElementById("recentExpenses");
+      if (filteredExpenses.length === 0) {
+        recentContainer.classList.add("empty");
+        recentContainer.innerHTML = `
+          <i class="bi bi-view-list"></i>
+          <p>No Expenses Found</p>
+          <small>Add some expenses to get started</small>`;
+      } else {
+        recentContainer.classList.remove("empty");
+        recentContainer.innerHTML = filteredExpenses.slice(-5).reverse().map((e, index) => {
+        const eDate = new Date(e.date);
+        const now = new Date();
+        const isCurrentMonth = eDate.getMonth() === now.getMonth() && eDate.getFullYear() === now.getFullYear();
+
+    return `
+    <div class="expense-item">
+      <strong>${e.category}</strong>
+      <p>${e.description || "No Description"}</p>
+      <small>${eDate.toLocaleDateString()}</small>
+      <span class="amount">₹${Number(e.amount).toFixed(2)}</span>
+      ${isCurrentMonth ? `<button onclick="promptDelete(${index})" class="delete-btn">Delete</button>` : ""}
+    </div>`;
+    }).join("");
+      }
+
+      const breakdown = {};
+      filteredExpenses.forEach(e => {
+        breakdown[e.category] = (breakdown[e.category] || 0) + Number(e.amount);
+      });
+
+      const catContainer = document.getElementById("categoryBreakdown");
+      if (Object.keys(breakdown).length === 0) {
+        catContainer.innerHTML = `<p class="empty">No Data Available</p>`;
+      } else {
+        catContainer.innerHTML = Object.keys(breakdown).map(cat => `
+          <div class="category-summary">
+            <strong>${cat}</strong>: ₹${breakdown[cat].toFixed(2)}
+          </div>`
+        ).join("");
+      }
+    }
+
+    function promptDelete(index) {
+      indexToDelete = index;
+      document.getElementById("deleteModal").classList.add("show");
+    }
+
+    function cancelDelete() {
+      indexToDelete = null;
+      document.getElementById("deleteModal").classList.remove("show");
+    }
+
+    function confirmDelete() {
+      if (indexToDelete === null) return;
+
+      let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+      const selectedMonth = selectedDate.getMonth();
+      const selectedYear = selectedDate.getFullYear();
+
+      let filteredExpenses = expenses.filter(e => {
+        const d = new Date(e.date);
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      });
+
+      const targetExpense = filteredExpenses[filteredExpenses.length - 1 - indexToDelete];
+      const updatedExpenses = expenses.filter(e => e !== targetExpense);
+
+      localStorage.setItem("expenses", JSON.stringify(updatedExpenses));
+      indexToDelete = null;
+      document.getElementById("deleteModal").classList.remove("show");
+      loadExpenses();
+    }
+
+    document.getElementById("prevMonth").addEventListener("click", () => {
+      selectedDate.setMonth(selectedDate.getMonth() - 1);
+      updateMonthDisplay();
+      loadExpenses();
+    });
+
+    document.getElementById("nextMonth").addEventListener("click", () => {
+      selectedDate.setMonth(selectedDate.getMonth() + 1);
+      updateMonthDisplay();
+      loadExpenses();
+    });
+
+    window.addEventListener("DOMContentLoaded", () => {
+      updateMonthDisplay();
+      loadExpenses();
+    });
+
+    fetch("nav.html")
+      .then(response => response.text())
+      .then(data=>{
+
+        document.getElementById("bottom-nav").innerHTML= data;
+
+        // Detect current page name
+    const currentPage = window.location.pathname.split("/").pop();
+
+    // Get all nav items
+    const navItems = document.querySelectorAll(".nav-item");
+
+    navItems.forEach(item => {
+      const href = item.getAttribute("href");
+      if (href === currentPage) {
+        item.classList.add("active");
+      } else {
+        item.classList.remove("active");
+      }
+    });
+
+      })
+      .catch(error=>console.error("Error loading bottom-nav.",error));
+  </script>
+    
+</body>
+</html>
