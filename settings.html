@@ -11,8 +11,17 @@
     <title>Xpensify</title>
 </head>
 <body>
+  
     <section class="container"><br>
       <h1 class="text-3xl font-bold mb-6">Settings</h1>
+
+      <div class="section">
+        <div class="section-title">Billing Cycle</div>
+        <label for="billing-start-day">Billing Start Day:</label>
+        <input type="number" id="billing-start-day" min="1" max="31" placeholder="00" style="padding:6px 10px;border:1px solid #ccc;border-radius:8px;">
+        <button id="saveBillingDay" class="btn-confirm-export">Save</button>
+      </div>
+
       <div class="section">
         <div class="section-title">Data</div>
 
@@ -45,161 +54,295 @@
         <div class="section-title">About</div>
         <div class="about-box setting-label">
           <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M440-280h80v-240h-80v240Zm40-320q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm0 520q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>
-          Version: 1.0.1
+          Version: 2.0.0
         </div>
       </div>
     <!-- Custom animated dialog for "no data" -->
     <div id="no-data-dialog" class="no-data-dialog">
     ⚠️ No transactions found for the selected date range.
     </div>
+    <!-- Success dialog -->
+    <div id="success-dialog" class="success-dialog">
+    ✅ Export successful! Your PDF has been downloaded.
+    </div>
     </section>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+  <div class="loader-container">
+    <div class="loader"></div>
+    <p>Updating...</p>
+  </div>
+  </div>
+
+  <!-- Success Overlay -->
+  <div id="successOverlay" class="success-overlay">
+  <div class="success-content">
+    <p>Billing cycle updated successfully!</p>
+  </div>
+  </div>
 
     <div id="bottom-nav"></div>
 
 <script>
-  // CLEAR ALL DATA
-  document.querySelector('.btn-clear').addEventListener('click', () => {
-  document.getElementById('clear-confirm-dialog').style.display = 'flex';
-});
-
-document.getElementById('cancel-clear').addEventListener('click', () => {
-  document.getElementById('clear-confirm-dialog').style.display = 'none';
-});
-
-document.getElementById('confirm-clear').addEventListener('click', () => {
-  localStorage.removeItem('expenses');
-  document.getElementById('clear-confirm-dialog').style.display = 'none';
-  location.reload(); // or show a "cleared successfully" message
-});
-
-  // EXPORT DATA
-  const exportBtn = document.querySelector(".btn-export");
-  const dateFilterDiv = document.getElementById("date-filter");
-  const confirmExportBtn = document.querySelector(".btn-confirm-export");
+(function () {
+  // Helpers: show small dialogs/toasts (reuse existing DOM nodes when available)
   const noDataDialog = document.getElementById("no-data-dialog");
+  const successDialog = document.getElementById("success-dialog");
+  const billingSuccess = document.getElementById("billing-success");
 
-  // Step 1: Show date filters on Export button click
-  exportBtn.addEventListener("click", function () {
-    dateFilterDiv.style.display = "block";
-  });
-
-  // Step 2: Confirm export on new button click
-  confirmExportBtn.addEventListener("click", function () {
-    const fromDate = document.getElementById("from-date").value;
-    const toDate = document.getElementById("to-date").value;
-
-    if (!fromDate || !toDate) {
-      showNoDataDialog("Please select both 'from' and 'to' dates.");
+  function showNoDataDialog(message, timeout = 3000) {
+    if (noDataDialog) {
+      noDataDialog.textContent = message;
+      noDataDialog.style.display = "block";
+      clearTimeout(noDataDialog._t);
+      noDataDialog._t = setTimeout(() => {
+        noDataDialog.style.display = "none";
+      }, timeout);
       return;
     }
+    alert(message);
+  }
 
-    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-
-    const filteredExpenses = expenses.filter(exp => {
-      const expenseDate = new Date(exp.date);
-      return expenseDate >= new Date(fromDate) && expenseDate <= new Date(toDate);
-    });
-
-    if (filteredExpenses.length === 0) {
-      showNoDataDialog("⚠️ No transactions found for the selected date range.");
+  function showSuccessDialog(message, timeout = 3000) {
+    if (successDialog) {
+      successDialog.textContent = message;
+      successDialog.style.display = "block";
+      clearTimeout(successDialog._t);
+      successDialog._t = setTimeout(() => {
+        successDialog.style.display = "none";
+      }, timeout);
       return;
     }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text("Xpensify - Expense Report", 10, 10);
-
-    let y = 30;
-    let total = 0;
-
-  filteredExpenses.forEach((expense, i) => {
-  doc.setFontSize(12);
-  doc.text(`${i + 1}. ${expense.category} - Rs. ${expense.amount}`, 10, y);
-  y += 7;
-  doc.setFontSize(10);
-  doc.text(`Date: ${expense.date}`, 12, y);
-  y += 5;
-
-  if (expense.description) {
-    doc.text(`Description: ${expense.description}`, 12, y);
-    y += 8;
-  } else {
-    y += 3;
+    alert(message);
   }
 
-  total += Number(expense.amount);
-
-  if (y > 280) {
-    doc.addPage();
-    y = 20;
-  }
-  });
-
-    y += 10;
-    doc.setFontSize(14);
-    doc.text(`Total: Rs. ${total.toLocaleString()}`, 10, y);
-
-    doc.save(`Xpensify_Report_${fromDate}_to_${toDate}.pdf`);
-  });
-
-  // Step 3: Show custom animated dialog
-  function showNoDataDialog(message) {
-    noDataDialog.textContent = message;
-    noDataDialog.style.display = "block";
-
-    setTimeout(() => {
-      noDataDialog.style.display = "none";
-    }, 3000); // Hide after 3 seconds
+  function showBillingSaved(message = "✅ Billing cycle start day saved successfully!", timeout = 2000) {
+    if (billingSuccess) {
+      billingSuccess.textContent = message;
+      billingSuccess.style.display = "block";
+      clearTimeout(billingSuccess._t);
+      billingSuccess._t = setTimeout(() => {
+        billingSuccess.style.display = "none";
+      }, timeout);
+      return;
+    }
+    showSuccessDialog(message, timeout);
   }
 
-  fetch("nav.html")
-      .then(response => response.text())
-      .then(data=>{
-
-        document.getElementById("bottom-nav").innerHTML= data;
-
-        // Detect current page name
-    const currentPage = window.location.pathname.split("/").pop();
-
-    // Get all nav items
-    const navItems = document.querySelectorAll(".nav-item");
-
-    navItems.forEach(item => {
-      const href = item.getAttribute("href");
-      if (href === currentPage) {
-        item.classList.add("active");
-      } else {
-        item.classList.remove("active");
-      }
-    });
-
-      })
-      .catch(error=>console.error("Error loading bottom-nav.",error));
-
+  // Ensure code runs after DOM ready
   document.addEventListener("DOMContentLoaded", () => {
-  const fromDateInput = document.getElementById("from-date");
-  const toDateInput = document.getElementById("to-date");
+    // Elements
+    const clearBtn = document.querySelector('.btn-clear');
+    const clearDialog = document.getElementById('clear-confirm-dialog');
+    const cancelClearBtn = document.getElementById('cancel-clear');
+    const confirmClearBtn = document.getElementById('confirm-clear');
 
-  // Set today's date
-  const today = new Date().toISOString().split("T")[0];
+    const exportBtn = document.querySelector(".btn-export");
+    const dateFilterDiv = document.getElementById("date-filter");
+    // NOTE: find the confirm export button inside the date-filter to avoid class collisions
+    const confirmExportBtn = dateFilterDiv ? dateFilterDiv.querySelector('button') : null;
+    const fromInput = document.getElementById("from-date");
+    const toInput = document.getElementById("to-date");
 
-  // Set max for from-date and to-date
-  fromDateInput.setAttribute("max", today);
-  toDateInput.setAttribute("max", today);
+    const billingInput = document.getElementById("billing-start-day");
+    const saveBillingBtn = document.getElementById("saveBillingDay");
 
-  // When from-date is selected, set min for to-date
-  fromDateInput.addEventListener("change", () => {
-    const fromValue = fromDateInput.value;
-    toDateInput.setAttribute("min", fromValue);
-  });
+    // ---------- Clear All Data handlers ----------
+    clearBtn && clearBtn.addEventListener('click', () => {
+      if (clearDialog) clearDialog.style.display = 'flex';
+    });
 
-  // Optional: Clear to-date if from-date changes
-  fromDateInput.addEventListener("input", () => {
-    toDateInput.value = "";
-  });
-  });
+    cancelClearBtn && cancelClearBtn.addEventListener('click', () => {
+      if (clearDialog) clearDialog.style.display = 'none';
+    });
+
+    confirmClearBtn && confirmClearBtn.addEventListener('click', () => {
+      // Keep billingStartDay if present; remove only expenses (safer)
+      const savedBilling = localStorage.getItem('billingStartDay');
+      localStorage.clear();
+      if (savedBilling !== null) localStorage.setItem('billingStartDay', savedBilling);
+
+      if (clearDialog) clearDialog.style.display = 'none';
+      // simple reload to update UI
+      location.reload();
+    });
+
+    // ---------- Export handlers ----------
+    exportBtn && exportBtn.addEventListener("click", function () {
+      // toggle
+      if (!dateFilterDiv) return;
+      dateFilterDiv.style.display = dateFilterDiv.style.display === "block" ? "none" : "block";
+    });
+
+    if (confirmExportBtn) {
+      confirmExportBtn.addEventListener("click", function () {
+        const fromDateStr = fromInput && fromInput.value;
+        const toDateStr = toInput && toInput.value;
+
+        if (!fromDateStr || !toDateStr) {
+          showNoDataDialog("Please select both 'From' and 'To' dates.");
+          return;
+        }
+
+        // Inclusive range: from 00:00:00 to 23:59:59
+        const fromDate = new Date(fromDateStr + "T00:00:00");
+        const toDate = new Date(toDateStr + "T23:59:59");
+
+        let expenses = [];
+        try {
+          expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+        } catch (e) {
+          console.error("Failed to parse expenses:", e);
+          showNoDataDialog("Failed to read stored expenses.");
+          return;
+        }
+
+        const filteredExpenses = expenses.filter(exp => {
+          const expDate = new Date(exp.date);
+          return expDate >= fromDate && expDate <= toDate;
+        });
+
+        if (!filteredExpenses.length) {
+          showNoDataDialog("⚠️ No transactions found for the selected date range.");
+          return;
+        }
+
+        // Use jsPDF (library already included in your page)
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) {
+          showNoDataDialog("jsPDF library not found. Please include it.");
+          return;
+        }
+
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("Xpensify - Expense Report", 10, 12);
+        doc.setFontSize(10);
+        doc.text(`From: ${fromDate.toLocaleDateString()}  To: ${toDate.toLocaleDateString()}`, 10, 22);
+
+        let y = 34;
+        let total = 0;
+
+        filteredExpenses.forEach((expense, i) => {
+          if (y > 280) { doc.addPage(); y = 20; }
+          doc.setFontSize(11);
+          const dateLabel = expense.date ? new Date(expense.date).toLocaleDateString() : "";
+          doc.text(`${i + 1}. ${expense.category || '-'}  |  Rs. ${expense.amount}`, 10, y);
+          y += 6;
+          doc.setFontSize(9);
+          doc.text(`Date: ${dateLabel}`, 12, y);
+          y += 5;
+          if (expense.description) {
+            doc.text(`Description: ${String(expense.description).slice(0, 80)}`, 12, y);
+            y += 8;
+          } else {
+            y += 3;
+          }
+          total += Number(expense.amount) || 0;
+        });
+
+        y += 8;
+        doc.setFontSize(12);
+        doc.text(`Total: Rs. ${total.toLocaleString()}`, 10, y);
+
+        const filename = `Xpensify_Report_${fromDateStr}_to_${toDateStr}.pdf`;
+        doc.save(filename);
+
+        showSuccessDialog("✅ Export successful! Your PDF has been downloaded.");
+        // hide date filter after export
+        dateFilterDiv.style.display = 'none';
+      });
+    }
+
+    // ---------- Date inputs limits ----------
+    // Promise inputs exist; set max to today and enforce min logic
+    const today = new Date().toISOString().split("T")[0];
+    if (fromInput) {
+      fromInput.setAttribute("max", today);
+      fromInput.addEventListener("change", () => {
+        if (toInput) toInput.setAttribute("min", fromInput.value);
+      });
+      fromInput.addEventListener("input", () => { if (toInput) toInput.value = ""; });
+    }
+    if (toInput) {
+      toInput.setAttribute("max", today);
+    }
+
+    // ---------- Billing Start Day save ----------
+    // load saved
+    const savedBilling = localStorage.getItem("billingStartDay");
+    if (savedBilling !== null && billingInput) billingInput.value = savedBilling;
+
+saveBillingBtn && saveBillingBtn.addEventListener('click', () => {
+  if (!billingInput) return;
+  const v = parseInt(billingInput.value, 10);
+  if (!v || v < 1 || v > 31) {
+    showNoDataDialog("Please enter a valid billing day between 1 and 31.");
+    return;
+  }
+
+  // Save billing start day
+  localStorage.setItem("billingStartDay", String(v));
+
+  const loadingEl = document.getElementById("loadingOverlay");
+  const successEl = document.getElementById("successOverlay");
+
+  // Show loader
+  loadingEl.style.display = 'flex';
+  requestAnimationFrame(() => loadingEl.classList.add('active'));
+
+  // Simulate saving delay
+  setTimeout(() => {
+    // Fade out loader
+    loadingEl.classList.remove('active');
+
+    function onFade(e) {
+      if (e.propertyName === 'opacity') {
+        loadingEl.removeEventListener('transitionend', onFade);
+        loadingEl.style.display = 'none';
+        // Show success overlay
+        successEl.classList.add('active');
+        // Redirect after success visible
+        setTimeout(() => window.location.href = 'index.html', 1500);
+      }
+    }
+    loadingEl.addEventListener('transitionend', onFade);
+
+    // fallback if transitionend not fired
+    setTimeout(() => {
+      if (!successEl.classList.contains('active')) {
+        loadingEl.removeEventListener('transitionend', onFade);
+        loadingEl.style.display = 'none';
+        successEl.classList.add('active');
+        setTimeout(() => window.location.href = 'index.html', 1500);
+      }
+    }, 600);
+  }, 900);
+});
+
+    // ---------- Bottom nav fetch (unchanged) ----------
+    fetch("nav.html")
+      .then(response => response.text())
+      .then(data => {
+        const bottomNavHolder = document.getElementById("bottom-nav");
+        if (bottomNavHolder) bottomNavHolder.innerHTML = data;
+
+        const currentPage = window.location.pathname.split("/").pop();
+        const navItems = document.querySelectorAll(".nav-item");
+
+        navItems.forEach(item => {
+          const href = item.getAttribute("href");
+          if (href === currentPage) {
+            item.classList.add("active");
+          } else {
+            item.classList.remove("active");
+          }
+        });
+      })
+      .catch(error => console.error("Error loading bottom-nav.", error));
+  }); // DOMContentLoaded
+})();
 </script>
 </body>
 </html>

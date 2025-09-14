@@ -55,150 +55,188 @@
                 <p>No Expenses Found</p>
                 <small>Add some expenses to get started</small>
             </div>
+            <button id="viewMoreBtn" style="display:none;" class="view-more-btn">View More</button>
         </section>
     </main>
 
   <div id="bottom-nav"></div>
   
-  <script>
-    let selectedDate = new Date();
-    let indexToDelete = null;
+<script>
+  let indexToDelete = null;
+  let showingAll = false;
+  let cycleOffset = 0; // 0 = current cycle, -1 = previous, +1 = next
 
-    function formatMonthYear(date) {
-      return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+  // Get current billing cycle range based on saved billingStartDay and offset
+  function getCurrentBillingCycle() {
+    const billingDay = parseInt(localStorage.getItem("billingStartDay")) || 1;
+
+    const today = new Date();
+    const startThisMonth = new Date(today.getFullYear(), today.getMonth(), billingDay);
+
+    let baseStart, baseEnd;
+    if (today >= startThisMonth) {
+      baseStart = startThisMonth;
+      baseEnd = new Date(startThisMonth);
+      baseEnd.setMonth(baseEnd.getMonth() + 1);
+    } else {
+      baseEnd = startThisMonth;
+      baseStart = new Date(startThisMonth);
+      baseStart.setMonth(baseStart.getMonth() - 1);
     }
 
-    function updateMonthDisplay() {
-      document.getElementById("currentMonth").textContent = formatMonthYear(selectedDate);
-    }
+    const cycleStart = new Date(baseStart);
+    cycleStart.setMonth(cycleStart.getMonth() + cycleOffset);
 
-    function loadExpenses() {
-      const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-      const selectedMonth = selectedDate.getMonth();
-      const selectedYear = selectedDate.getFullYear();
+    const cycleEnd = new Date(baseEnd);
+    cycleEnd.setMonth(cycleEnd.getMonth() + cycleOffset);
 
-      const filteredExpenses = expenses.filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-      });
+    return { cycleStart, cycleEnd };
+  }
 
-      const totalAmount = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-      document.getElementById("totalAmount").innerHTML = `<i class="bi bi-currency-rupee"></i> ${totalAmount.toFixed(2)}`;
+  function updateMonthDisplay() {
+    const { cycleStart, cycleEnd } = getCurrentBillingCycle();
+    const options = { day: 'numeric', month: 'short' };
 
-      const recentContainer = document.getElementById("recentExpenses");
-      if (filteredExpenses.length === 0) {
-        recentContainer.classList.add("empty");
-        recentContainer.innerHTML = `
-          <i class="bi bi-view-list"></i>
-          <p>No Expenses Found</p>
-          <small>Add some expenses to get started</small>`;
-      } else {
-        recentContainer.classList.remove("empty");
-        recentContainer.innerHTML = filteredExpenses.slice(-5).reverse().map((e, index) => {
+    document.getElementById("currentMonth").textContent =
+      `Billing Cycle: ${cycleStart.toLocaleDateString('en-GB', options)} - ${cycleEnd.toLocaleDateString('en-GB', options)}`;
+  }
+
+  function loadExpenses() {
+    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    const { cycleStart, cycleEnd } = getCurrentBillingCycle();
+
+    const filteredExpenses = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d >= cycleStart && d < cycleEnd;
+    });
+
+    const totalAmount = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    document.getElementById("totalAmount").innerHTML =
+      `<i class="bi bi-currency-rupee"></i> ${totalAmount.toFixed(2)}`;
+
+    const recentContainer = document.getElementById("recentExpenses");
+    const viewMoreBtn = document.getElementById("viewMoreBtn");
+
+    if (filteredExpenses.length === 0) {
+      recentContainer.classList.add("empty");
+      recentContainer.innerHTML = `
+        <i class="bi bi-view-list"></i>
+        <p>No Expenses Found</p>
+        <small>Add some expenses to get started</small>`;
+      viewMoreBtn.style.display = "none";
+    } else {
+      recentContainer.classList.remove("empty");
+
+      const itemsToShow = showingAll
+        ? filteredExpenses.slice().reverse()
+        : filteredExpenses.slice(-5).reverse();
+
+      recentContainer.innerHTML = itemsToShow.map((e, index) => {
         const eDate = new Date(e.date);
         const now = new Date();
-        const isCurrentMonth = eDate.getMonth() === now.getMonth() && eDate.getFullYear() === now.getFullYear();
+        const isCurrentCycle = eDate >= cycleStart && eDate < cycleEnd;
 
-    return `
-    <div class="expense-item">
-      <strong>${e.category}</strong>
-      <p>${e.description || "No Description"}</p>
-      <small>${eDate.toLocaleDateString()}</small>
-      <span class="amount">₹${Number(e.amount).toFixed(2)}</span>
-      ${isCurrentMonth ? `<button onclick="promptDelete(${index})" class="delete-btn">Delete</button>` : ""}
-    </div>`;
-    }).join("");
-      }
+        return `
+        <div class="expense-item">
+          <strong>${e.category}</strong>
+          <p>${e.description || "No Description"}</p>
+          <small>${eDate.toLocaleDateString()}</small>
+          <span class="amount">₹${Number(e.amount).toFixed(2)}</span>
+          ${isCurrentCycle ? `<button onclick="promptDelete(${index})" class="delete-btn">Delete</button>` : ""}
+        </div>`;
+      }).join("");
 
-      const breakdown = {};
-      filteredExpenses.forEach(e => {
-        breakdown[e.category] = (breakdown[e.category] || 0) + Number(e.amount);
+      viewMoreBtn.style.display = filteredExpenses.length > 5 ? "block" : "none";
+      viewMoreBtn.textContent = showingAll ? "View Less" : "View More";
+    }
+
+    // Category breakdown
+    const breakdown = {};
+    filteredExpenses.forEach(e => {
+      breakdown[e.category] = (breakdown[e.category] || 0) + Number(e.amount);
+    });
+
+    const catContainer = document.getElementById("categoryBreakdown");
+    if (Object.keys(breakdown).length === 0) {
+      catContainer.innerHTML = `<p class="empty">No Data Available</p>`;
+    } else {
+      catContainer.innerHTML = Object.keys(breakdown).map(cat => `
+        <div class="category-summary">
+          <strong>${cat}</strong>: ₹${breakdown[cat].toFixed(2)}
+        </div>`
+      ).join("");
+    }
+  }
+
+  function promptDelete(index) {
+    indexToDelete = index;
+    document.getElementById("deleteModal").classList.add("show");
+  }
+
+  function cancelDelete() {
+    indexToDelete = null;
+    document.getElementById("deleteModal").classList.remove("show");
+  }
+
+  function confirmDelete() {
+    if (indexToDelete === null) return;
+
+    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    const { cycleStart, cycleEnd } = getCurrentBillingCycle();
+
+    let filteredExpenses = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d >= cycleStart && d < cycleEnd;
+    });
+
+    const targetExpense = filteredExpenses[filteredExpenses.length - 1 - indexToDelete];
+    const updatedExpenses = expenses.filter(e => e !== targetExpense);
+
+    localStorage.setItem("expenses", JSON.stringify(updatedExpenses));
+    indexToDelete = null;
+    document.getElementById("deleteModal").classList.remove("show");
+    loadExpenses();
+  }
+
+  document.getElementById("prevMonth").addEventListener("click", () => {
+    cycleOffset--;
+    updateMonthDisplay();
+    loadExpenses();
+  });
+
+  document.getElementById("nextMonth").addEventListener("click", () => {
+    cycleOffset++;
+    updateMonthDisplay();
+    loadExpenses();
+  });
+
+  document.getElementById("viewMoreBtn").addEventListener("click", () => {
+    showingAll = !showingAll;
+    loadExpenses();
+  });
+
+  window.addEventListener("DOMContentLoaded", () => {
+    updateMonthDisplay();
+    loadExpenses();
+  });
+
+  fetch("nav.html")
+    .then(response => response.text())
+    .then(data => {
+      document.getElementById("bottom-nav").innerHTML = data;
+
+      const currentPage = window.location.pathname.split("/").pop();
+      const navItems = document.querySelectorAll(".nav-item");
+      navItems.forEach(item => {
+        const href = item.getAttribute("href");
+        if (href === currentPage) {
+          item.classList.add("active");
+        } else {
+          item.classList.remove("active");
+        }
       });
-
-      const catContainer = document.getElementById("categoryBreakdown");
-      if (Object.keys(breakdown).length === 0) {
-        catContainer.innerHTML = `<p class="empty">No Data Available</p>`;
-      } else {
-        catContainer.innerHTML = Object.keys(breakdown).map(cat => `
-          <div class="category-summary">
-            <strong>${cat}</strong>: ₹${breakdown[cat].toFixed(2)}
-          </div>`
-        ).join("");
-      }
-    }
-
-    function promptDelete(index) {
-      indexToDelete = index;
-      document.getElementById("deleteModal").classList.add("show");
-    }
-
-    function cancelDelete() {
-      indexToDelete = null;
-      document.getElementById("deleteModal").classList.remove("show");
-    }
-
-    function confirmDelete() {
-      if (indexToDelete === null) return;
-
-      let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-      const selectedMonth = selectedDate.getMonth();
-      const selectedYear = selectedDate.getFullYear();
-
-      let filteredExpenses = expenses.filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-      });
-
-      const targetExpense = filteredExpenses[filteredExpenses.length - 1 - indexToDelete];
-      const updatedExpenses = expenses.filter(e => e !== targetExpense);
-
-      localStorage.setItem("expenses", JSON.stringify(updatedExpenses));
-      indexToDelete = null;
-      document.getElementById("deleteModal").classList.remove("show");
-      loadExpenses();
-    }
-
-    document.getElementById("prevMonth").addEventListener("click", () => {
-      selectedDate.setMonth(selectedDate.getMonth() - 1);
-      updateMonthDisplay();
-      loadExpenses();
-    });
-
-    document.getElementById("nextMonth").addEventListener("click", () => {
-      selectedDate.setMonth(selectedDate.getMonth() + 1);
-      updateMonthDisplay();
-      loadExpenses();
-    });
-
-    window.addEventListener("DOMContentLoaded", () => {
-      updateMonthDisplay();
-      loadExpenses();
-    });
-
-    fetch("nav.html")
-      .then(response => response.text())
-      .then(data=>{
-
-        document.getElementById("bottom-nav").innerHTML= data;
-
-        // Detect current page name
-    const currentPage = window.location.pathname.split("/").pop();
-
-    // Get all nav items
-    const navItems = document.querySelectorAll(".nav-item");
-
-    navItems.forEach(item => {
-      const href = item.getAttribute("href");
-      if (href === currentPage) {
-        item.classList.add("active");
-      } else {
-        item.classList.remove("active");
-      }
-    });
-
-      })
-      .catch(error=>console.error("Error loading bottom-nav.",error));
-  </script>
-    
+    })
+    .catch(error => console.error("Error loading bottom-nav.", error));
+</script>
 </body>
 </html>
