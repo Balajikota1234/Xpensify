@@ -243,7 +243,7 @@ h1{
     width: 100%;
     height: 100%;
     background: white;
-    display: flex;
+    display: none;
     justify-content: center;
     align-items: center;
     z-index: 9980; /* lower than success */
@@ -253,6 +253,7 @@ h1{
 }
 
 .loading-overlay.active {
+    display: flex;
     opacity: 1;
     pointer-events: auto;
 }
@@ -280,7 +281,7 @@ h1{
     height: 100%;
     background-color: #ffffff;
     z-index: 9999; /* above loader */
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     flex-direction: column;
@@ -292,6 +293,7 @@ h1{
 }
 
 .success-overlay.active {
+    display: flex;
     opacity: 1;
     pointer-events: auto;
 }
